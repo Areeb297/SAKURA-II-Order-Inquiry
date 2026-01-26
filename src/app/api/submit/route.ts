@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb, initDatabase } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { sendLeadNotification } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
@@ -55,9 +55,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // Ensure database table exists
-    await initDatabase();
 
     const sql = getDb();
 
