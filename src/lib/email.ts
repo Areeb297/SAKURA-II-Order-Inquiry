@@ -1,4 +1,6 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 interface LeadEmailData {
   firstName: string;
@@ -17,16 +19,6 @@ interface LeadEmailData {
 }
 
 export async function sendLeadNotification(data: LeadEmailData) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || "587"),
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
   const productList = data.products.map((p) => `• ${p}`).join("\n");
   const subject = `[EdgeCortix Lead] ${data.companyName} – ${data.products[0] || "Product Inquiry"} – Qty: ${data.estimatedQuantity}`;
 
@@ -71,13 +63,23 @@ export async function sendLeadNotification(data: LeadEmailData) {
   `;
 
   try {
-    await transporter.sendMail({
-      from: `"EdgeCortix Leads" <${process.env.SMTP_FROM}>`,
-      to: process.env.NOTIFICATION_EMAIL,
+    const { data: result, error } = await resend.emails.send({
+      from: process.env.EMAIL_FROM || "EdgeCortix Leads <onboarding@resend.dev>",
+      to: [
+        "edgecortix@ebttikar.com",
+        "areebshafqat@gmail.com",
+      ],
+      replyTo: data.companyEmail,
       subject,
       html: htmlContent,
     });
-    return { success: true };
+
+    if (error) {
+      console.error("Resend email error:", error);
+      return { success: false, error };
+    }
+
+    return { success: true, id: result?.id };
   } catch (error) {
     console.error("Email send failed:", error);
     return { success: false, error };
