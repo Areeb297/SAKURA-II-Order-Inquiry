@@ -79,8 +79,8 @@ export async function POST(request: NextRequest) {
       RETURNING id
     `;
 
-    // Send email notification (non-blocking)
-    sendLeadNotification({
+    // Send email notification (awaited so logs appear)
+    const emailResult = await sendLeadNotification({
       firstName: body.firstName,
       lastName: body.lastName,
       companyName: body.companyName,
@@ -94,7 +94,8 @@ export async function POST(request: NextRequest) {
       purchaseTimeframe: body.purchaseTimeframe,
       useCase: body.useCase,
       message: body.message,
-    }).catch((err) => console.error("Email notification failed:", err));
+    });
+    console.log("[SUBMIT] Email result:", emailResult);
 
     return NextResponse.json(
       {

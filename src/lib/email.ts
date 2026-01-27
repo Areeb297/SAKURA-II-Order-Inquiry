@@ -8,9 +8,10 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
-  tls: {
-    rejectUnauthorized: false,
-  },
+  tls: { rejectUnauthorized: false },
+  connectionTimeout: 30000,
+  greetingTimeout: 15000,
+  socketTimeout: 30000,
 });
 
 interface LeadEmailData {
@@ -73,7 +74,6 @@ export async function sendLeadNotification(data: LeadEmailData) {
     </div>
   `;
 
-  // Confirmation email to the user who submitted the form
   const userConfirmationHtml = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background-color: #1a2744; padding: 20px; text-align: center;">
@@ -113,32 +113,32 @@ export async function sendLeadNotification(data: LeadEmailData) {
   `;
 
   try {
-    // Send lead notification to internal team
-    const leadEmail = transporter.sendMail({
+    console.log("[EMAIL] Sending lead notification via SMTP...");
+    const leadResult = await transporter.sendMail({
       from: process.env.SMTP_FROM || "edgecortix@ebttikar.com",
       to: "edgecortix@ebttikar.com, areebshafqat@gmail.com",
       replyTo: data.companyEmail,
       subject,
       html: htmlContent,
     });
+    console.log("[EMAIL] Lead notification sent:", leadResult.messageId);
 
-    // Send confirmation to the user who submitted the form
-    const confirmationEmail = transporter.sendMail({
+    console.log("[EMAIL] Sending user confirmation to:", data.companyEmail);
+    const confirmResult = await transporter.sendMail({
       from: process.env.SMTP_FROM || "edgecortix@ebttikar.com",
       to: data.companyEmail,
       subject: "Thank You for Your SAKURA-II Inquiry – Ebttikar Technology",
       html: userConfirmationHtml,
     });
-
-    const [leadResult, confirmResult] = await Promise.allSettled([leadEmail, confirmationEmail]);
+    console.log("[EMAIL] User confirmation sent:", confirmResult.messageId);
 
     return {
-      success: leadResult.status === "fulfilled",
-      messageId: leadResult.status === "fulfilled" ? leadResult.value.messageId : undefined,
-      confirmationSent: confirmResult.status === "fulfilled",
+      success: true,
+      messageId: leadResult.messageId,
+      confirmationSent: true,
     };
   } catch (error) {
-    console.error("Email send failed:", error);
+    console.error("[EMAIL] Send FAILED:", error);
     return { success: false, error };
   }
 }
