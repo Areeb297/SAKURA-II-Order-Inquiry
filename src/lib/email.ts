@@ -1,6 +1,17 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: Number(process.env.SMTP_PORT) === 465,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
 
 interface LeadEmailData {
   firstName: string;
@@ -57,29 +68,75 @@ export async function sendLeadNotification(data: LeadEmailData) {
       </div>
 
       <div style="background: #f5f5f5; padding: 15px; text-align: center; color: #888; font-size: 12px;">
-        Submitted via SAKURA-II Order Inquiry Form | Ebttikar Technology × EdgeCortix
+        Submitted via SAKURA-II Order Inquiry Form | Ebttikar Technology &times; EdgeCortix
+      </div>
+    </div>
+  `;
+
+  // Confirmation email to the user who submitted the form
+  const userConfirmationHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #1a2744; padding: 20px; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 22px;">Thank You for Your Inquiry!</h1>
+        <p style="color: #00a0ab; margin: 5px 0 0;">SAKURA-II Edge AI Accelerator</p>
+      </div>
+
+      <div style="padding: 25px; background: #ffffff;">
+        <p style="font-size: 16px; color: #333;">Dear ${data.firstName},</p>
+
+        <p style="color: #555; line-height: 1.6;">
+          We have received your SAKURA-II order inquiry. Our team at Ebttikar Technology will review your request and get back to you within <strong>1-2 business days</strong>.
+        </p>
+
+        <div style="background: #f0f9fa; border-left: 4px solid #00a0ab; padding: 15px; margin: 20px 0; border-radius: 0 6px 6px 0;">
+          <h3 style="color: #1a2744; margin: 0 0 10px;">Your Inquiry Summary</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr><td style="padding: 4px 0; color: #666;">Product(s):</td><td style="padding: 4px 0;">${data.products.join(", ")}</td></tr>
+            <tr><td style="padding: 4px 0; color: #666;">Quantity:</td><td style="padding: 4px 0;">${data.estimatedQuantity}</td></tr>
+            <tr><td style="padding: 4px 0; color: #666;">Timeframe:</td><td style="padding: 4px 0;">${data.purchaseTimeframe}</td></tr>
+            <tr><td style="padding: 4px 0; color: #666;">Use Case:</td><td style="padding: 4px 0;">${data.useCase}</td></tr>
+          </table>
+        </div>
+
+        <p style="color: #555; line-height: 1.6;">
+          Need immediate assistance? Contact us at
+          <a href="mailto:edgecortix@ebttikar.com" style="color: #00a0ab;">edgecortix@ebttikar.com</a>
+        </p>
+
+        <p style="color: #555;">Best regards,<br><strong>Ebttikar Technology &times; EdgeCortix Team</strong></p>
+      </div>
+
+      <div style="background: #f5f5f5; padding: 15px; text-align: center; color: #888; font-size: 12px;">
+        Ebttikar Technology Co. Ltd. | Authorized EdgeCortix Partner
       </div>
     </div>
   `;
 
   try {
-    const { data: result, error } = await resend.emails.send({
-      from: process.env.EMAIL_FROM || "EdgeCortix Leads <onboarding@resend.dev>",
-      to: [
-        "edgecortix@ebttikar.com",
-        "areebshafqat@gmail.com",
-      ],
+    // Send lead notification to internal team
+    const leadEmail = transporter.sendMail({
+      from: process.env.SMTP_FROM || "edgecortix@ebttikar.com",
+      to: "edgecortix@ebttikar.com, areebshafqat@gmail.com",
       replyTo: data.companyEmail,
       subject,
       html: htmlContent,
     });
 
-    if (error) {
-      console.error("Resend email error:", error);
-      return { success: false, error };
-    }
+    // Send confirmation to the user who submitted the form
+    const confirmationEmail = transporter.sendMail({
+      from: process.env.SMTP_FROM || "edgecortix@ebttikar.com",
+      to: data.companyEmail,
+      subject: "Thank You for Your SAKURA-II Inquiry – Ebttikar Technology",
+      html: userConfirmationHtml,
+    });
 
-    return { success: true, id: result?.id };
+    const [leadResult, confirmResult] = await Promise.allSettled([leadEmail, confirmationEmail]);
+
+    return {
+      success: leadResult.status === "fulfilled",
+      messageId: leadResult.status === "fulfilled" ? leadResult.value.messageId : undefined,
+      confirmationSent: confirmResult.status === "fulfilled",
+    };
   } catch (error) {
     console.error("Email send failed:", error);
     return { success: false, error };
