@@ -61,8 +61,13 @@ function buildMimeMessage(to: string[], subject: string, htmlBody: string, reply
 }
 
 function buildSoapEnvelope(to: string[], subject: string, htmlBody: string, replyTo?: string): string {
-  const mimeRaw = buildMimeMessage(to, subject, htmlBody, replyTo);
-  const mimeBase64 = Buffer.from(mimeRaw).toString("base64");
+  const toRecipients = to
+    .map((email) => `<t:Mailbox><t:EmailAddress>${email}</t:EmailAddress></t:Mailbox>`)
+    .join("");
+
+  const replyToXml = replyTo
+    ? `<t:ReplyTo><t:Mailbox><t:EmailAddress>${replyTo}</t:EmailAddress></t:Mailbox></t:ReplyTo>`
+    : "";
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
@@ -78,7 +83,10 @@ function buildSoapEnvelope(to: string[], subject: string, htmlBody: string, repl
       </m:SavedItemFolderId>
       <m:Items>
         <t:Message>
-          <t:MimeContent CharacterSet="UTF-8">${mimeBase64}</t:MimeContent>
+          <t:Subject>${subject}</t:Subject>
+          <t:Body BodyType="HTML"><![CDATA[${htmlBody}]]></t:Body>
+          <t:ToRecipients>${toRecipients}</t:ToRecipients>
+          ${replyToXml}
         </t:Message>
       </m:Items>
     </m:CreateItem>
