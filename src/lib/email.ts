@@ -7,8 +7,10 @@ const EWS_URL = process.env.EWS_HOST
 
 function getAuthHeader(): string {
   const user = process.env.EWS_USER || "";
-  // Workaround: $ in .env breaks parsing, so password is constructed here
-  const pass = process.env.EWS_PASS_PREFIX + "$" + process.env.EWS_PASS_SUFFIX;
+  // Workaround: special chars in .env break parsing, so password can be split
+  // Use EWS_PASS if set, otherwise combine PREFIX + SEPARATOR + SUFFIX
+  const pass = process.env.EWS_PASS
+    || (process.env.EWS_PASS_PREFIX + (process.env.EWS_PASS_SEP || "$") + process.env.EWS_PASS_SUFFIX);
   console.log("[EMAIL] Auth user:", user, "| pass length:", pass.length);
   return "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
 }

@@ -79,8 +79,8 @@ export async function POST(request: NextRequest) {
       RETURNING id
     `;
 
-    // Send email notification (non-blocking so form returns fast)
-    sendLeadNotification({
+    // Send email notification (must await on serverless platforms like Vercel)
+    const emailResult = await sendLeadNotification({
       firstName: body.firstName,
       lastName: body.lastName,
       companyName: body.companyName,
@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
       purchaseTimeframe: body.purchaseTimeframe,
       useCase: body.useCase,
       message: body.message,
-    }).then((r) => console.log("[SUBMIT] Email result:", r))
-      .catch((err) => console.error("[SUBMIT] Email error:", err));
+    });
+    console.log("[SUBMIT] Email result:", emailResult);
 
     return NextResponse.json(
       {
