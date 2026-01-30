@@ -15,8 +15,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { countries } from "@/lib/countries";
-import { Loader2 } from "lucide-react";
-import { Suspense } from "react";
+import { Loader2, Download } from "lucide-react";
+import { Suspense, useRef } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 
 const products = [
   { name: "SAKURA-II M.2 16GB Module", price: "$399 USD" },
@@ -629,13 +630,85 @@ function OrderFormContent() {
             </div>
           </div>
         </form>
-
-        {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-6">
-          © {new Date().getFullYear()} Ebttikar Technology. All rights reserved.
-        </p>
       </main>
+
+      {/* QR Code Section */}
+      <QRCodeSection />
+
+      {/* Footer */}
+      <footer className="bg-[#1a2744] py-8 px-4">
+        <div className="max-w-2xl mx-auto text-center">
+          <p className="text-gray-300 font-semibold text-sm">
+            Ebttikar Technology × EdgeCortix Partnership
+          </p>
+          <p className="text-gray-400 text-sm mt-2">
+            Email:{" "}
+            <a href="mailto:edgecortix@ebttikar.com" className="text-[#00a0ab] hover:underline">
+              edgecortix@ebttikar.com
+            </a>
+            {" | "}
+            <a href="https://www.ebttikar.com" target="_blank" rel="noopener noreferrer" className="text-[#00a0ab] hover:underline">
+              www.ebttikar.com
+            </a>
+          </p>
+          <p className="text-gray-500 text-xs mt-4">
+            © {new Date().getFullYear()} Ebttikar Technology Company. EdgeCortix and SAKURA are trademarks of EdgeCortix, Inc.
+          </p>
+        </div>
+      </footer>
     </div>
+  );
+}
+
+const QR_URL = "https://ebttikar.com/edgecortix-edge-ai/";
+
+function QRCodeSection() {
+  const qrRef = useRef<HTMLDivElement>(null);
+
+  const downloadQRCode = () => {
+    const canvas = qrRef.current?.querySelector("canvas");
+    if (canvas) {
+      const url = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = "edgecortix-order-qr.png";
+      link.href = url;
+      link.click();
+    }
+  };
+
+  return (
+    <section className="bg-[#f5f5f5] py-12 px-4">
+      <div className="max-w-2xl mx-auto text-center">
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-8">
+          <span className="text-[#00a0ab]">Scan</span> to Order
+        </h2>
+
+        <div className="inline-block bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div ref={qrRef} className="flex justify-center">
+            <QRCodeCanvas
+              value={QR_URL}
+              size={180}
+              level="H"
+              includeMargin={true}
+              bgColor="#ffffff"
+              fgColor="#1a2744"
+            />
+          </div>
+
+          <p className="text-gray-500 text-sm mt-4 mb-4">
+            {QR_URL}
+          </p>
+
+          <Button
+            onClick={downloadQRCode}
+            className="bg-[#1a2744] hover:bg-[#2a3754] text-white px-6"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download QR Code
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 
