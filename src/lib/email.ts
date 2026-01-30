@@ -1,126 +1,15 @@
-// Send emails via Exchange Web Services (EWS) SOAP API over HTTPS
-// No external dependencies - uses built-in fetch()
+// Send emails via Resend (cloud service)
+// Ebttikar Exchange is firewalled - not accessible from external networks
 
-const EWS_URL = process.env.EWS_HOST
-  ? `${process.env.EWS_HOST}/ews/exchange.asmx`
-  : "https://webmail.ebttikar.com/ews/exchange.asmx";
+import { Resend } from "resend";
 
-function getAuthHeader(): string {
-  const user = process.env.EWS_USER || "";
-  // Workaround: special chars in .env break parsing, so password can be split
-  // Use EWS_PASS if set, otherwise combine PREFIX + SEPARATOR + SUFFIX
-  const pass = process.env.EWS_PASS
-    || (process.env.EWS_PASS_PREFIX + (process.env.EWS_PASS_SEP || "$") + process.env.EWS_PASS_SUFFIX);
-  console.log("[EMAIL] Auth user:", user, "| pass length:", pass.length);
-  return "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
-}
+// Initialize Resend client
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-function buildMimeMessage(to: string[], subject: string, htmlBody: string, replyTo?: string): string {
-  const boundary = "----=_Part_" + Date.now().toString(36);
-  const fromAddr = process.env.EWS_USER || "edgecortix@ebttikar.com";
-  const toHeader = to.join(", ");
-
-  // Build multipart/alternative MIME with plain text + HTML
-  const plainText = htmlBody
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&bull;/g, "•")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  const lines = [
-    `From: Edge Cortix <${fromAddr}>`,
-    `To: ${toHeader}`,
-    `Subject: =?UTF-8?B?${Buffer.from(subject).toString("base64")}?=`,
-    replyTo ? `Reply-To: ${replyTo}` : null,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ``,
-    `--${boundary}`,
-    `Content-Type: text/plain; charset="UTF-8"`,
-    `Content-Transfer-Encoding: quoted-printable`,
-    ``,
-    plainText,
-    ``,
-    `--${boundary}`,
-    `Content-Type: text/html; charset="UTF-8"`,
-    `Content-Transfer-Encoding: base64`,
-    ``,
-    Buffer.from(htmlBody).toString("base64").replace(/(.{76})/g, "$1\r\n"),
-    ``,
-    `--${boundary}--`,
-  ].filter((line) => line !== null);
-
-  return lines.join("\r\n");
-}
-
-function buildSoapEnvelope(to: string[], subject: string, htmlBody: string, replyTo?: string): string {
-  const toRecipients = to
-    .map((email) => `<t:Mailbox><t:EmailAddress>${email}</t:EmailAddress></t:Mailbox>`)
-    .join("");
-
-  const replyToXml = replyTo
-    ? `<t:ReplyTo><t:Mailbox><t:EmailAddress>${replyTo}</t:EmailAddress></t:Mailbox></t:ReplyTo>`
-    : "";
-
-  return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
-  <soap:Header>
-    <t:RequestServerVersion Version="Exchange2013"/>
-  </soap:Header>
-  <soap:Body>
-    <m:CreateItem MessageDisposition="SendAndSaveCopy">
-      <m:SavedItemFolderId>
-        <t:DistinguishedFolderId Id="sentitems"/>
-      </m:SavedItemFolderId>
-      <m:Items>
-        <t:Message>
-          <t:Subject>${subject}</t:Subject>
-          <t:Body BodyType="HTML"><![CDATA[${htmlBody}]]></t:Body>
-          <t:ToRecipients>${toRecipients}</t:ToRecipients>
-          ${replyToXml}
-        </t:Message>
-      </m:Items>
-    </m:CreateItem>
-  </soap:Body>
-</soap:Envelope>`;
-}
-
-async function sendViaEWS(to: string[], subject: string, html: string, replyTo?: string) {
-  const soapXml = buildSoapEnvelope(to, subject, html, replyTo);
-
-  const response = await fetch(EWS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=utf-8",
-      Authorization: getAuthHeader(),
-    },
-    body: soapXml,
-  });
-
-  const responseText = await response.text();
-
-  if (!response.ok) {
-    console.error("[EMAIL] EWS HTTP error:", response.status, responseText.substring(0, 500));
-    throw new Error(`EWS request failed with status ${response.status}`);
-  }
-
-  // Check for SOAP fault or error in response
-  if (responseText.includes("ResponseClass=\"Error\"") || responseText.includes("Fault")) {
-    console.error("[EMAIL] EWS SOAP error:", responseText.substring(0, 500));
-    throw new Error("EWS returned an error response");
-  }
-
-  return responseText;
-}
+// Verified domain: onasi.care
+// Replies go to edgecortix@ebttikar.com
+const FROM_EMAIL = "EdgeCortix Orders <edgecortix_orders@onasi.care>";
+const REPLY_TO_EMAIL = "edgecortix@ebttikar.com";
 
 interface LeadEmailData {
   firstName: string;
@@ -241,27 +130,54 @@ function buildConfirmationHtml(data: LeadEmailData): string {
 export async function sendLeadNotification(data: LeadEmailData) {
   const subject = `[EdgeCortix Lead] ${data.companyName} – ${data.products[0] || "Product Inquiry"} – Qty: ${data.estimatedQuantity}`;
 
+  // Send to EdgeCortix team, BCC backup
+  const recipients = ["edgecortix@ebttikar.com"];
+  const bccRecipients = ["areebshafqat@gmail.com"];
+
+  if (!process.env.RESEND_API_KEY) {
+    console.error("[EMAIL] RESEND_API_KEY not configured!");
+    return { success: false, error: "Email service not configured" };
+  }
+
   try {
-    console.log("[EMAIL] Sending lead notification via EWS (HTTPS)...");
-    await sendViaEWS(
-      ["edgecortix@ebttikar.com", "areebshafqat@gmail.com"],
-      subject,
-      buildLeadHtml(data),
-      data.companyEmail
-    );
-    console.log("[EMAIL] Lead notification sent successfully");
+    console.log("[EMAIL] Sending lead notification via Resend...");
 
-    console.log("[EMAIL] Sending user confirmation to:", data.companyEmail);
-    await sendViaEWS(
-      [data.companyEmail],
-      "Thank You for Your SAKURA-II Inquiry - Ebttikar Technology",
-      buildConfirmationHtml(data)
-    );
-    console.log("[EMAIL] User confirmation sent successfully");
+    // Send lead notification to team
+    const leadResult = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: recipients,
+      bcc: bccRecipients,
+      replyTo: data.companyEmail, // Reply goes to the customer
+      subject: subject,
+      html: buildLeadHtml(data),
+    });
 
-    return { success: true };
+    if (leadResult.error) {
+      throw new Error(leadResult.error.message);
+    }
+
+    console.log("[EMAIL] Lead notification sent:", leadResult.data?.id);
+
+    // Send confirmation to customer
+    console.log("[EMAIL] Sending confirmation to:", data.companyEmail);
+
+    const confirmResult = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [data.companyEmail],
+      replyTo: REPLY_TO_EMAIL, // Reply goes to EdgeCortix team
+      subject: "Thank You for Your SAKURA-II Inquiry - Ebttikar Technology",
+      html: buildConfirmationHtml(data),
+    });
+
+    if (confirmResult.error) {
+      throw new Error(confirmResult.error.message);
+    }
+
+    console.log("[EMAIL] Confirmation sent:", confirmResult.data?.id);
+
+    return { success: true, method: "Resend" };
   } catch (error) {
-    console.error("[EMAIL] EWS Send FAILED:", error);
+    console.error("[EMAIL] Resend failed:", error);
     return { success: false, error };
   }
 }
