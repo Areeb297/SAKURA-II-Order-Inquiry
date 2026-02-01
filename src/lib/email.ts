@@ -1,15 +1,14 @@
-// Send emails via Resend (cloud service)
-// Ebttikar Exchange is firewalled - not accessible from external networks
+// Send emails via SMTP (Ebttikar Exchange)
+// Static IP 145.79.13.137 whitelisted by IT for SMTP relay
 
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+const SMTP_HOST = process.env.SMTP_HOST || "webmail.ebttikar.com";
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587");
+const SMTP_USER = process.env.SMTP_USER || "edgecortix@ebttikar.com";
+const SMTP_PASS = process.env.SMTP_PASS || "";
 
-// Verified domain: onasi.care
-// Replies go to edgecortix@ebttikar.com
-const FROM_EMAIL = "EdgeCortix Orders <edgecortix_orders@onasi.care>";
-const REPLY_TO_EMAIL = "edgecortix@ebttikar.com";
+const FROM_EMAIL = `EdgeCortix Orders <${SMTP_USER}>`;
 
 interface LeadEmailData {
   firstName: string;
@@ -25,6 +24,24 @@ interface LeadEmailData {
   purchaseTimeframe: string;
   useCase: string;
   message?: string;
+}
+
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465, // true for 465, false for 587
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+    tls: {
+      rejectUnauthorized: false, // Accept self-signed certificates
+    },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+  });
 }
 
 function buildLeadHtml(data: LeadEmailData): string {
@@ -134,50 +151,45 @@ export async function sendLeadNotification(data: LeadEmailData) {
   const recipients = ["edgecortix@ebttikar.com"];
   const bccRecipients = ["areebshafqat@gmail.com"];
 
-  if (!process.env.RESEND_API_KEY) {
-    console.error("[EMAIL] RESEND_API_KEY not configured!");
+  if (!SMTP_PASS) {
+    console.error("[EMAIL] SMTP_PASS not configured!");
     return { success: false, error: "Email service not configured" };
   }
 
   try {
-    console.log("[EMAIL] Sending lead notification via Resend...");
+    const transporter = createTransporter();
+
+    console.log("[EMAIL] Sending lead notification via SMTP...");
+    console.log("[EMAIL] Host:", SMTP_HOST, "Port:", SMTP_PORT, "User:", SMTP_USER);
 
     // Send lead notification to team
-    const leadResult = await resend.emails.send({
+    await transporter.sendMail({
       from: FROM_EMAIL,
-      to: recipients,
-      bcc: bccRecipients,
-      replyTo: data.companyEmail, // Reply goes to the customer
+      to: recipients.join(", "),
+      bcc: bccRecipients.join(", "),
+      replyTo: data.companyEmail,
       subject: subject,
       html: buildLeadHtml(data),
     });
 
-    if (leadResult.error) {
-      throw new Error(leadResult.error.message);
-    }
-
-    console.log("[EMAIL] Lead notification sent:", leadResult.data?.id);
+    console.log("[EMAIL] Lead notification sent successfully");
 
     // Send confirmation to customer
     console.log("[EMAIL] Sending confirmation to:", data.companyEmail);
 
-    const confirmResult = await resend.emails.send({
+    await transporter.sendMail({
       from: FROM_EMAIL,
-      to: [data.companyEmail],
-      replyTo: REPLY_TO_EMAIL, // Reply goes to EdgeCortix team
+      to: data.companyEmail,
+      replyTo: "edgecortix@ebttikar.com",
       subject: "Thank You for Your SAKURA-II Inquiry - Ebttikar Technology",
       html: buildConfirmationHtml(data),
     });
 
-    if (confirmResult.error) {
-      throw new Error(confirmResult.error.message);
-    }
+    console.log("[EMAIL] Confirmation sent successfully");
 
-    console.log("[EMAIL] Confirmation sent:", confirmResult.data?.id);
-
-    return { success: true, method: "Resend" };
+    return { success: true, method: "SMTP" };
   } catch (error) {
-    console.error("[EMAIL] Resend failed:", error);
+    console.error("[EMAIL] SMTP failed:", error);
     return { success: false, error };
   }
 }
