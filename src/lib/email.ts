@@ -1,14 +1,7 @@
-// Send emails via SMTP (Ebttikar Exchange)
-// Static IP 145.79.13.137 whitelisted by IT for SMTP relay
+// Send emails via VPS Email API (whitelisted IP for Ebttikar SMTP)
+// Vercel → VPS API (145.79.13.137:4000) → Ebttikar Exchange
 
-import nodemailer from "nodemailer";
-
-const SMTP_HOST = process.env.SMTP_HOST || "webmail.ebttikar.com";
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587");
-const SMTP_USER = process.env.SMTP_USER || "edgecortix@ebttikar.com";
-const SMTP_PASS = process.env.SMTP_PASS || "";
-
-const FROM_EMAIL = `EdgeCortix Orders <${SMTP_USER}>`;
+const VPS_EMAIL_API = process.env.VPS_EMAIL_API || "http://145.79.13.137:4000/api/send-email";
 
 interface LeadEmailData {
   firstName: string;
@@ -24,24 +17,6 @@ interface LeadEmailData {
   purchaseTimeframe: string;
   useCase: string;
   message?: string;
-}
-
-function createTransporter() {
-  return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465, // true for 465, false for 587
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false, // Accept self-signed certificates
-    },
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
 }
 
 function buildLeadHtml(data: LeadEmailData): string {
@@ -147,49 +122,56 @@ function buildConfirmationHtml(data: LeadEmailData): string {
 export async function sendLeadNotification(data: LeadEmailData) {
   const subject = `[EdgeCortix Lead] ${data.companyName} – ${data.products[0] || "Product Inquiry"} – Qty: ${data.estimatedQuantity}`;
 
-  // Send to EdgeCortix team, BCC backup
-  const recipients = ["edgecortix@ebttikar.com"];
-  const bccRecipients = ["areebshafqat@gmail.com"];
-
-  if (!SMTP_PASS) {
-    console.error("[EMAIL] SMTP_PASS not configured!");
-    return { success: false, error: "Email service not configured" };
-  }
-
   try {
-    const transporter = createTransporter();
-
-    console.log("[EMAIL] Sending lead notification via SMTP...");
-    console.log("[EMAIL] Host:", SMTP_HOST, "Port:", SMTP_PORT, "User:", SMTP_USER);
+    console.log("[EMAIL] Sending lead notification via VPS API...");
 
     // Send lead notification to team
-    await transporter.sendMail({
-      from: FROM_EMAIL,
-      to: recipients.join(", "),
-      bcc: bccRecipients.join(", "),
-      replyTo: data.companyEmail,
-      subject: subject,
-      html: buildLeadHtml(data),
+    const leadResponse = await fetch(VPS_EMAIL_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: "edgecortix@ebttikar.com",
+        bcc: "areebshafqat@gmail.com",
+        replyTo: data.companyEmail,
+        subject: subject,
+        html: buildLeadHtml(data),
+      }),
     });
+
+    const leadResult = await leadResponse.json();
+
+    if (!leadResult.success) {
+      throw new Error(leadResult.error || "Failed to send lead notification");
+    }
 
     console.log("[EMAIL] Lead notification sent successfully");
 
     // Send confirmation to customer
     console.log("[EMAIL] Sending confirmation to:", data.companyEmail);
 
-    await transporter.sendMail({
-      from: FROM_EMAIL,
-      to: data.companyEmail,
-      replyTo: "edgecortix@ebttikar.com",
-      subject: "Thank You for Your SAKURA-II Inquiry - Ebttikar Technology",
-      html: buildConfirmationHtml(data),
+    const confirmResponse = await fetch(VPS_EMAIL_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: data.companyEmail,
+        replyTo: "edgecortix@ebttikar.com",
+        subject: "Thank You for Your SAKURA-II Inquiry - Ebttikar Technology",
+        html: buildConfirmationHtml(data),
+      }),
     });
 
-    console.log("[EMAIL] Confirmation sent successfully");
+    const confirmResult = await confirmResponse.json();
 
-    return { success: true, method: "SMTP" };
+    if (!confirmResult.success) {
+      console.error("[EMAIL] Confirmation failed:", confirmResult.error);
+      // Don't throw - lead email was sent successfully
+    } else {
+      console.log("[EMAIL] Confirmation sent successfully");
+    }
+
+    return { success: true, method: "VPS-SMTP" };
   } catch (error) {
-    console.error("[EMAIL] SMTP failed:", error);
+    console.error("[EMAIL] VPS API error:", error);
     return { success: false, error };
   }
 }
