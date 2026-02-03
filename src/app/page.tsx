@@ -20,12 +20,12 @@ import { Suspense, useRef } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
 const products = [
-  { name: "SAKURA-II M.2 16GB Module", price: "$399 USD" },
-  { name: "SAKURA-II Single Eval Card", price: "$499 USD" },
-  { name: "SAKURA-II Dual Card", price: "$799 USD" },
-  { name: "M.2 Development System", price: "$2,499 USD" },
-  { name: "Single PCIe Dev System", price: "$2,499 USD" },
-  { name: "Dual PCIe Dev System", price: "$2,799 USD" },
+  "SAKURA-II M.2 16GB Module",
+  "SAKURA-II Single Eval Card",
+  "SAKURA-II Dual Card",
+  "M.2 Development System",
+  "Single PCIe Dev System",
+  "Dual PCIe Dev System",
 ];
 
 const timeframeOptions = [
@@ -443,27 +443,22 @@ function OrderFormContent() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {products.map((product) => {
-                    const isSelected = selectedProducts.includes(product.name);
+                    const isSelected = selectedProducts.includes(product);
                     return (
                       <label
-                        key={product.name}
+                        key={product}
                         className={`product-card flex items-start gap-3 ${
                           isSelected ? "selected" : ""
                         }`}
                       >
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={() => toggleProduct(product.name)}
+                          onCheckedChange={() => toggleProduct(product)}
                           className="mt-0.5"
                         />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-gray-900 block leading-tight">
-                            {product.name}
-                          </span>
-                          <span className="text-sm text-[#00a0ab] font-semibold mt-0.5 block">
-                            {product.price}
-                          </span>
-                        </div>
+                        <span className="text-sm font-medium text-gray-900 leading-tight">
+                          {product}
+                        </span>
                       </label>
                     );
                   })}
